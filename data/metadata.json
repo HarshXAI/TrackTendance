@@ -1,0 +1,26 @@
+{
+    "60004200123": {
+        "name": "John Doe",
+        "year": 2,
+        "branch": "Computer Engineering",
+        "gmail": "john.doe@example.com"
+    },
+    "60004200124": {
+        "name": "Jane Smith",
+        "year": 3,
+        "branch": "Information Technology",
+        "gmail": "jane.smith@example.com"
+    },
+    "60009220026": {
+        "name": "Harsh kanani",
+        "year": 3,
+        "branch": "CSE-DS",
+        "gmail": "test@gmail.com"
+    },
+    "60009220001": {
+        "name": "Dev",
+        "year": 3,
+        "branch": "CE",
+        "gmail": "d@gmail.com"
+    }
+}
