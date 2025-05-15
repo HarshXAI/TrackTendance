@@ -27,7 +27,13 @@ class FaceTracker:
                 if track['embeddings']:
                     # Compare with last embedding of track
                     track_emb = track['embeddings'][-1]
-                    similarity = 1 - cosine(embedding.cpu().numpy().flatten(), track_emb.cpu().numpy().flatten())
+                    
+                    # Safely convert embeddings to numpy arrays
+                    current_emb = self._to_numpy_array(embedding)
+                    previous_emb = self._to_numpy_array(track_emb)
+                    
+                    # Calculate similarity
+                    similarity = 1 - cosine(current_emb, previous_emb)
                     
                     if similarity > self.min_similarity and similarity > best_similarity:
                         best_similarity = similarity
@@ -63,3 +69,14 @@ class FaceTracker:
                 self.tracks[track_id]['disappeared'] += 1
         
         return active_tracks
+    
+    def _to_numpy_array(self, embedding):
+        """Safely convert embedding to numpy array, regardless of type"""
+        if isinstance(embedding, np.ndarray):
+            return embedding.flatten()
+        elif hasattr(embedding, 'cpu') and hasattr(embedding, 'numpy'):
+            return embedding.cpu().numpy().flatten()
+        elif hasattr(embedding, 'numpy'):
+            return embedding.numpy().flatten()
+        # If it's a list or other iterable, convert to numpy array
+        return np.array(embedding).flatten()

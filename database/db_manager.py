@@ -67,6 +67,9 @@ class DatabaseManager:
             except Exception as e:
                 print(f"Error processing student document: {e}")
                 continue
+        # Sort by SAP ID
+            students.sort(key=lambda x: x.sap_id)
+            print(f"Student: {student.name}, SAP ID: {student.sap_id}")
         return students
     
     def get_student_by_sap(self, sap_id: str) -> Optional[StudentModel]:
@@ -155,3 +158,39 @@ class DatabaseManager:
         
         records = self.db.attendance.find(query)
         return [AttendanceRecord(**record) for record in records]
+
+    def get_recent_attendance(self, limit=10):
+        """Get recent attendance records"""
+        try:
+            return self.db.attendance.find().sort("timestamp", -1).limit(limit)
+        except Exception as e:
+            print(f"Error getting recent attendance: {str(e)}")
+            return []
+
+    def get_all_subjects(self):
+        """Get list of all subjects in the database"""
+        try:
+            subjects = self.db.attendance.distinct("subject")
+            return [s for s in subjects if s]  # Filter out None/empty
+        except Exception as e:
+            print(f"Error getting subjects: {str(e)}")
+            return []
+
+    def get_attendance_records(self, start_date=None, end_date=None, subject=None, sap_id=None):
+        """Get attendance records with filters"""
+        try:
+            query = {}
+            
+            if start_date and end_date:
+                query["timestamp"] = {"$gte": start_date, "$lte": end_date}
+            
+            if subject:
+                query["subject"] = subject
+                
+            if sap_id:
+                query["sap_id"] = sap_id
+                
+            return list(self.db.attendance.find(query).sort("timestamp", -1))
+        except Exception as e:
+            print(f"Error getting attendance records: {str(e)}")
+            return []

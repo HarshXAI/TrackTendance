@@ -13,3 +13,4 @@ dlib>=19.22.0
 tensorflow-macos>=2.9.0; platform_system=="Darwin" and platform_machine=="arm64"
 tensorflow>=2.9.0; platform_system!="Darwin" or platform_machine!="arm64"
 mediapipe>=0.10.0
+streamlit>=1.20.0

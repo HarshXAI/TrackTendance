@@ -8,13 +8,21 @@ class FaceSegmenter:
         self.face_mesh = self.mp_face_mesh.FaceMesh(
             static_image_mode=False,
             max_num_faces=1,
-            min_detection_confidence=0.5
+            refine_landmarks=False,
+            min_detection_confidence=0.5,
+            min_tracking_confidence=0.5
         )
     
     def segment_face(self, image):
         """Segment face from image using MediaPipe Face Mesh"""
+        # Make sure image is not None and has proper dimensions
+        if image is None or len(image.shape) < 2:
+            return None, None
+            
         height, width = image.shape[:2]
-        results = self.face_mesh.process(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+        # Convert to RGB as MediaPipe requires RGB input
+        rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        results = self.face_mesh.process(rgb_image)
         
         if not results.multi_face_landmarks:
             return None, None

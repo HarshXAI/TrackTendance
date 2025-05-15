@@ -5,6 +5,7 @@ from torch.utils.data import DataLoader
 import numpy as np
 from tqdm import tqdm
 import os
+import sys
 
 from models.adaptive_lstm import AdaptiveLSTM
 from data.student_database import StudentDatabase
@@ -90,6 +91,44 @@ def train_model(model, train_loader, val_loader, num_epochs=50, device='cuda'):
             best_val_loss = val_loss
             torch.save(model.state_dict(), 'best_model.pth')
 
+def print_model_summary(model):
+    """Print summary of model architecture and parameters"""
+    print("\n" + "="*50)
+    print("ADAPTIVE LSTM MODEL SUMMARY")
+    print("="*50)
+    
+    # Count parameters
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    total_params = sum(p.numel() for p in model.parameters())
+    
+    # Print model structure
+    print(f"\nModel Structure:")
+    print(f"{str(model)}")
+    
+    # Print parameter details for each layer
+    print("\nLayer Details:")
+    for name, module in model.named_children():
+        print(f"\n{name.upper()} LAYER:")
+        
+        # Special handling for LSTM cell to show adaptive gate structure
+        if name == 'lstm_cell':
+            print("  Adaptive Gate Structure:")
+            print(f"  - Input Gate:  Linear({module.input_gate.in_features} -> {module.input_gate.out_features}) with clarity score")
+            print(f"  - Forget Gate: Linear({module.forget_gate.in_features} -> {module.forget_gate.out_features}) with clarity score")
+            print(f"  - Output Gate: Linear({module.output_gate.in_features} -> {module.output_gate.out_features}) with clarity score")
+            print(f"  - Cell Gate:   Linear({module.cell_gate.in_features} -> {module.cell_gate.out_features}) standard")
+        else:
+            for param_name, param in module.named_parameters():
+                print(f"  - {param_name}: {tuple(param.size())}")
+    
+    # Print general info
+    print("\nGeneral Information:")
+    print(f"Total parameters: {total_params:,}")
+    print(f"Trainable parameters: {trainable_params:,}")
+    print(f"Non-trainable parameters: {total_params - trainable_params:,}")
+    
+    print("="*50)
+
 def main():
     try:
         # Initialize database manager
@@ -103,41 +142,69 @@ def main():
         
         print(f"Found {len(students)} students in database")
         
-        # Define paths
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        database_dir = os.path.join(current_dir, 'data', 'student_images')
-        metadata_file = os.path.join(current_dir, 'data', 'metadata.json')
+        # Use MongoDB data directly instead of trying to load from files
+        print("Using student data directly from MongoDB...")
         
-        if not os.path.exists(database_dir):
-            os.makedirs(database_dir)
-            print(f"Created directory: {database_dir}")
-            
-        if not os.path.exists(metadata_file):
-            print(f"Warning: metadata file not found at {metadata_file}")
-            return
+        # Skip the file-based student database and use MongoDB data
+        student_ids = [student.sap_id for student in students]
+        print(f"Student IDs for training: {student_ids}")
         
-        # Initialize and create student database
-        student_db = StudentDatabase(database_dir)
-        students = student_db.create_database(database_dir, metadata_file)
+        # Initialize attendance system with MongoDB data
+        attendance_system = AttendanceSystem()
         
-        if not students:
-            print("No student data found. Please add students first.")
-            return
-        
-        # Initialize attendance system
-        attendance_system = AttendanceSystem(
-            student_database_path=metadata_file,  # Using metadata file as database path
-            model_path=None  # No model path needed during training
-        )
-        
-        # Update this line with your actual video paths
+        # Check if we have a video path to process
         video_paths = [
-            'data/training_videos/video1.mp4',
-            'data/training_videos/video2.mp4'
+            '/Users/harshkanani/Desktop/ipd_2/data/training_videos/video.mp4'  # Default path
         ]
         
-        # Prepare training data
-        sequences, labels = prepare_training_data(video_paths, student_db, attendance_system)
+        # Check if video exists
+        for path in video_paths:
+            if not os.path.exists(path):
+                print(f"Warning: Training video not found at {path}")
+                print("Please provide a valid training video path.")
+                
+                # Ask user if they want to provide a video path
+                use_custom = input("Do you want to specify a video path? (y/n): ")
+                if use_custom.lower() == 'y':
+                    custom_path = input("Enter video path: ")
+                    if os.path.exists(custom_path):
+                        video_paths = [custom_path]
+                        break
+                    else:
+                        print(f"Error: Video not found at {custom_path}")
+                        return
+                else:
+                    print("Using webcam for training data collection.")
+                    video_paths = [0]  # Use webcam
+        
+        # Create a simple dataset from MongoDB
+        print("Creating dataset from student embeddings...")
+        sequences = []
+        labels = []
+        
+        # Convert MongoDB data to training data
+        for idx, student in enumerate(students):
+            if hasattr(student, 'face_embeddings') and student.face_embeddings:
+                # Convert each student's embeddings into sequences
+                embeddings = student.face_embeddings
+                
+                # If we have enough embeddings, create sequences
+                if len(embeddings) >= 5:
+                    # Create clarity scores (default to 1.0 for existing embeddings)
+                    clarity_scores = [1.0] * len(embeddings)
+                    
+                    # Create a sequence for each consecutive set of 5 embeddings
+                    for i in range(len(embeddings) - 4):
+                        seq = embeddings[i:i+5]
+                        clar = clarity_scores[i:i+5]
+                        sequences.append({'embeddings': seq, 'clarity_scores': clar})
+                        labels.append(idx)
+        
+        if not sequences:
+            print("Not enough embedding data for training. Please capture more images.")
+            return
+            
+        print(f"Created {len(sequences)} training sequences")
         
         # Create dataset and dataloaders
         dataset = FaceSequenceDataset(sequences, labels)
@@ -145,18 +212,49 @@ def main():
         val_size = len(dataset) - train_size
         train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
         
-        train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-        val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False)
+        train_loader = DataLoader(train_dataset, batch_size=min(32, len(train_dataset)), shuffle=True)
+        val_loader = DataLoader(val_dataset, batch_size=min(32, len(val_dataset)), shuffle=False)
         
         # Initialize and train model
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         model = AdaptiveLSTM(
-            input_size=128,  # FaceNet embedding size
+            input_size=len(students[0].face_embeddings[0]) if students and students[0].face_embeddings else 512,
             hidden_size=256,
-            num_classes=len(student_db.student_ids)
+            num_classes=len(students)
         ).to(device)
         
-        train_model(model, train_loader, val_loader, num_epochs=50, device=device)
+        # Create models/trained directory if it doesn't exist
+        os.makedirs('models/trained', exist_ok=True)
+        
+        # Train model
+        train_model(model, train_loader, val_loader, num_epochs=100, device=device)
+        
+        # Print model summary
+        print_model_summary(model)
+        
+        # Save final model
+        torch.save(model.state_dict(), 'models/trained/best_model.pth')
+        print("Model training completed and saved to models/trained/best_model.pth")
+        
+        # Optionally save a visualization of the model
+        try:
+            from torchviz import make_dot
+            
+            # Create sample input for visualization
+            sample_input = torch.randn(1, 5, model.lstm_cell.input_size)
+            sample_clarity = torch.ones(1, 5)
+            
+            # Generate visualization
+            dot = make_dot(model(sample_input, sample_clarity), 
+                          params=dict(model.named_parameters()),
+                          show_attrs=True, show_saved=True)
+            
+            # Save visualization
+            dot.format = 'png'
+            dot.render(filename='models/trained/model_visualization')
+            print("Model visualization saved to models/trained/model_visualization.png")
+        except ImportError:
+            print("Note: Install torchviz package for model visualization: pip install torchviz")
         
     except Exception as e:
         print(f"Error during training: {str(e)}")

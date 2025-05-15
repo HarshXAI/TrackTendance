@@ -45,7 +45,8 @@ def main():
     for sap_id, entry in attendance_log.items():
         student = entry['student']
         confidence = entry['confidence']
-        print(f"- {student.name} (SAP ID: {sap_id}) - Confidence: {confidence:.2f}")
+        method = entry.get('method', 'direct')
+        print(f"- {student.name} (SAP ID: {sap_id}) - Confidence: {confidence:.2f} - Method: {method}")
 
 if __name__ == "__main__":
     main()

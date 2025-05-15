@@ -4,16 +4,16 @@ import numpy as np
 
 class FaceSequenceDataset(Dataset):
     def __init__(self, sequences, labels):
-        self.sequences = sequences  # Shape: (N, seq_len, embedding_size)
-        self.clarity_scores = sequences['clarity_scores']  # Shape: (N, seq_len)
-        self.labels = labels  # Shape: (N,)
+        self.sequences = sequences  # List of dicts with 'embeddings' and 'clarity_scores'
+        self.labels = labels  # List of ints
         
     def __len__(self):
         return len(self.labels)
     
     def __getitem__(self, idx):
+        seq = self.sequences[idx]
         return {
-            'embedding_sequence': torch.FloatTensor(self.sequences[idx]),
-            'clarity_scores': torch.FloatTensor(self.clarity_scores[idx]),
+            'embedding_sequence': torch.FloatTensor(seq['embeddings']),
+            'clarity_scores': torch.FloatTensor(seq['clarity_scores']),
             'label': torch.LongTensor([self.labels[idx]])
         }
